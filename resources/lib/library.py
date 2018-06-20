@@ -24,18 +24,24 @@ import xbmcgui
 import xbmcaddon
 import json
 from time import gmtime, strftime
+from pptv import PPTVClass
+from common import *
+from cache import CacheFunc
 
 
 PLOT_ENABLE = True
 
 
 class LibraryFunctions():
+
     def __init__(self):
         self.WINDOW = xbmcgui.Window(10000)
         self.LIMIT = int(xbmcaddon.Addon().getSetting("limit"))
         self.RECENTITEMS_UNPLAYED = xbmcaddon.Addon().getSetting("recentitems_unplayed") == 'true'
         self.RANDOMITEMS_UNPLAYED = xbmcaddon.Addon().getSetting("randomitems_unplayed") == 'true'
         self.INCLUDE_SPECIALS = xbmcaddon.Addon().getSetting("include_specials") == 'true'
+        self.PPTV = PPTVClass()
+        self.CACHE = CacheFunc()
 
     def _get_data(self, query_type, useCache):
         # Check if data is being refreshed elsewhere
@@ -202,6 +208,40 @@ class LibraryFunctions():
 
         return unicode(rv, 'utf-8', errors='ignore')
 
+    def json_query_recommended(self, channel, limit=20):
+        result = self._fetch_home_videos(CHANNEL_ID_MAP[channel])
+        is_tvshow = False if channel not in ["tv", "children", "cartoon", "music"] else True
+        channel_str = "movies" if channel not in ["tv", "children", "cartoon", "music"] else "tvshows"
+        listitems = []
+        count = 0
+        for item in result:
+            if item['jump_params']:
+                continue
+            detail_data = self._fetch_video_detail(item['content_id'])
+            if not detail_data:
+                continue
+            listitem = item_remap(detail_data['v'], item['cover_img'], is_tvshow)
+            listitems.append(listitem)
+            count += 1
+            if count == limit - 1:
+                break
+        json_query = create_json_rpc(listitems, channel_str)
+        rv = json.dumps(json_query)
+
+        return unicode(rv, 'utf-8', errors='ignore')
+
+    def json_query_episode(self, item):
+        vid = item['tvshowid']
+        result, total_num = self._fetch_video_episodelist(vid)
+        listitems = []
+        if result:
+            listitem = item_episode(result, item, total_num)
+            listitems.append(listitem)
+        json_query = create_json_rpc(listitems, "episodes")
+        rv = json.dumps(json_query)
+
+        return unicode(rv, 'utf-8', errors='ignore')
+
     # These functions default to random items.
     # By sorting differently they'll also be used for recent items.
     def _fetch_random_movies(self, useCache=False, sort=False, prefix="randommovies"):
@@ -255,19 +295,26 @@ class LibraryFunctions():
     # Recommended movies: movies that are in progress
     def _fetch_recommended_movies(self, useCache=False):
         def query_recommended_movies():
-            return self.json_query("VideoLibrary.GetMovies", properties=self.movie_properties,
-                                   query_filter=self.inprogress_filter)
+            return self.json_query_recommended("movie")
         return self._fetch_items(useCache, "recommendedmovies", query_recommended_movies)
+
+    # Recommended varieties
+    def _fetch_recommended_varieties(self, useCache=False):
+        def query_recommended_varieties():
+            return self.json_query_recommended("variety")
+        return self._fetch_items(useCache, "recommendedvarieties", query_recommended_varieties)
+
+    # Recommended svip
+    def _fetch_recommended_svip(self, useCache=False):
+        def query_recommended_svip():
+            return self.json_query_recommended("svip")
+        return self._fetch_items(useCache, "recommendedsvip", query_recommended_svip)
 
     # Recommended episodes: Earliest unwatched episode from in-progress shows
     def _fetch_recommended_episodes(self, useCache=False):
         def query_recommended_episodes():
             # First we get a list of all the in-progress TV shows.
-            json_query_string = self.json_query("VideoLibrary.GetTVShows", unplayed=True,
-                                                properties=self.tvshow_properties,
-                                                sort={"order": "descending",
-                                                      "method": "lastplayed"},
-                                                query_filter=self.inprogress_filter)
+            json_query_string = self.json_query_recommended("tv")
             json_query = json.loads(json_query_string)
 
             # If we found any, find the oldest unwatched show for each one.
@@ -275,15 +322,56 @@ class LibraryFunctions():
                 for item in json_query['result']['tvshows']:
                     if xbmc.abortRequested:
                         break
-                    json_query2 = self.json_query("VideoLibrary.GetEpisodes", unplayed=True,
-                                                  include_specials=self.INCLUDE_SPECIALS,
-                                                  properties=self.tvepisode_properties,
-                                                  sort={"method": "episode"}, limit=1,
-                                                  params={"tvshowid": item['tvshowid']})
-                    self.WINDOW.setProperty("recommended-episodes-data-%d"
+                    json_query2 = self.json_query_episode(item)
+                    self.WINDOW.setProperty("recommended-episodes-data-%s"
                                             % item['tvshowid'], json_query2)
             return json_query_string
         return self._fetch_items(useCache, "recommendedepisodes", query_recommended_episodes)
+
+    def _fetch_recommended_children(self, useCache):
+        def query_recommended_children():
+            json_query_string = self.json_query_recommended("children")
+            json_query = json.loads(json_query_string)
+
+            if "result" in json_query and 'tvshows' in json_query['result']:
+                for item in json_query['result']['tvshows']:
+                    if xbmc.abortRequested:
+                        break
+                    json_query2 = self.json_query_episode(item)
+                    self.WINDOW.setProperty("recommended-children-data-%s"
+                                            % item['tvshowid'], json_query2)
+            return json_query_string
+        return self._fetch_items(useCache, "recommendedchildren", query_recommended_children)
+
+    def _fetch_recommended_cartoon(self, useCache):
+        def query_recommended_cartoon():
+            json_query_string = self.json_query_recommended("cartoon")
+            json_query = json.loads(json_query_string)
+
+            if "result" in json_query and 'tvshows' in json_query['result']:
+                for item in json_query['result']['tvshows']:
+                    if xbmc.abortRequested:
+                        break
+                    json_query2 = self.json_query_episode(item)
+                    self.WINDOW.setProperty("recommended-cartoon-data-%s"
+                                            % item['tvshowid'], json_query2)
+            return json_query_string
+        return self._fetch_items(useCache, "recommendedcartoon", query_recommended_cartoon)
+
+    def _fetch_recommended_musicvideo(self, useCache):
+        def query_recommended_musicvideo():
+            json_query_string = self.json_query_recommended("music")
+            json_query = json.loads(json_query_string)
+
+            if "result" in json_query and 'tvshows' in json_query['result']:
+                for item in json_query['result']['tvshows']:
+                    if xbmc.abortRequested:
+                        break
+                    json_query2 = self.json_query_episode(item)
+                    self.WINDOW.setProperty("recommended-musicvideo-data-%s"
+                                            % item['tvshowid'], json_query2)
+            return json_query_string
+        return self._fetch_items(useCache, "recommendedmusicvideo", query_recommended_musicvideo)
 
     # Recommended albums are just the most-played ones
     def _fetch_recommended_albums(self, useCache=False):
@@ -333,3 +421,62 @@ class LibraryFunctions():
 
             return unicode(json.dumps(rv), 'utf-8', errors='ignore')
         return self._fetch_items(useCache, prefix="favouriteepisodes", queryFunc=query_favourite)
+
+    def _fetch_home_content(self, useCache=True):
+        if useCache:
+            data = self.CACHE.get_cache_data("homecontent", "pptv")
+            try:
+                if data:
+                    return data
+            except Exception:
+                log("old format cache")
+        data = self.PPTV.get_home_content()
+        data = json.loads(data)
+        result = None
+        if data['message'] == "success" and "data" in data and len(data['data']) > 0:
+            self.CACHE.set_cache_data("homecontent", data['data'], "pptv", 0)
+            result = data['data']
+        return result
+
+    def _fetch_videos_index(self):
+        data = self._fetch_home_content()
+        if not data:
+            return None
+        listitems = []
+        for item in data[1]['list']:
+            params = item['params'].split('&')
+            listitem = {"name": item['name'],
+                        "epgId": params[len(params) - 1][6:]}
+            listitems.append(listitem)
+        return listitems
+
+    def _fetch_home_videos(self, channel_id):
+        data = self._fetch_home_content()
+        if not data:
+            return None
+        for item in data[1]['list']:
+            params = item['params'].split('&')
+            epgId = params[len(params) - 1][6:]
+            if channel_id == epgId:
+                return item['item']
+        return None
+
+    def _fetch_video_detail(self, vid, useCache=True):
+        if useCache:
+            data = self.CACHE.get_cache_data("pptv_videodetail", vid)
+            if data and data['v'].get('vid'):
+                return data
+        data = self.PPTV.get_video_detail(vid)
+        data = json.loads(data)
+        if data and "v" in data:
+            self.CACHE.set_cache_data("pptv_videodetail", data, vid)
+            return data
+        return None
+
+    def _fetch_video_episodelist(self, vid, useCache=True):
+        data = self._fetch_video_detail(vid)
+        playlinks = data['v']['video_list']['playlink2']
+        total_num = data['v']['total_state']
+        if isinstance(playlinks, dict):
+            playlinks = [playlinks]
+        return playlinks, total_num

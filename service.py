@@ -43,19 +43,19 @@ class Main:
 
         # clear our property, if another instance is already running
         # it should stop now
-        self._init_vars()
-        self.WINDOW.clearProperty('LibraryDataProvider_Running')
+        # self._init_vars()
+        self.WINDOW.clearProperty('PPTVDataProvider_Running')
         a_total = datetime.datetime.now()
-        self._fetch_random()
-        self._fetch_recent()
-        self._fetch_recommended()
-        self._fetch_favourite()
+        # self._fetch_random()
+        # self._fetch_recent()
+        # self._fetch_recommended()
+        # self._fetch_favourite()
         b_total = datetime.datetime.now()
         c_total = b_total - a_total
         log('Total time needed for all queries: %s' % c_total)
         # give a possible other instance some time to notice the empty property
-        self.WINDOW.setProperty('LibraryDataProvider_Running', 'true')
-        self._daemon()
+        self.WINDOW.setProperty('PPTVDataProvider_Running', 'true')
+        # self._daemon()
 
     def _init_vars(self):
         self.WINDOW = xbmcgui.Window(10000)
@@ -77,16 +77,19 @@ class Main:
 
     def _fetch_recommended(self):
         LIBRARY._fetch_recommended_movies()
-        LIBRARY._fetch_recommended_episodes()
-        LIBRARY._fetch_recommended_albums()
+        # LIBRARY._fetch_recommended_episodes()
+        # LIBRARY._fetch_recommended_albums()
 
     def _fetch_favourite(self):
         LIBRARY._fetch_favourite_episodes()
 
+    def _fetch_home_videos_index(self):
+        LIBRARY._fetch_videos_index()
+
     def _daemon(self):
         # deamon is meant to keep script running at all time
         count = 0
-        while not self.Monitor.abortRequested() and self.WINDOW.getProperty('LibraryDataProvider_Running') == 'true':
+        while not self.Monitor.abortRequested() and self.WINDOW.getProperty('PPTVDataProvider_Running') == 'true':
             if self.Monitor.waitForAbort(1):
                 # Abort was requested while waiting. We should exit
                 self.Monitor.update_listitems = None
@@ -148,7 +151,7 @@ class Widgets_Player(xbmc.Player):
                 isMovie = True
                 try:
                     filename = self.getPlayingFile()
-                except:
+                except Exception:
                     pass
                 if filename != '':
                     for string in self.substrings:

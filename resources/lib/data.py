@@ -161,9 +161,11 @@ def parse_movies(request, list_type, full_liz, usecache, plot_enable, limit, dat
                 liz.setProperty("dbid", str(movie['movieid']))
                 liz.setProperty("imdbnumber", str(movie['imdbnumber']))
                 liz.setProperty("fanart_image", movie['art'].get('fanart', ''))
+                liz.setProperty("cid", str(movie['movieid']))
                 liz.setArt(movie['art'])
                 liz.setThumbnailImage(movie['art'].get('poster', ''))
                 liz.setIconImage('DefaultVideoCover.png')
+                liz.setPath(movie.get("path", ""))
                 hasVideo = False
                 for key, value in movie['streamdetails'].iteritems():
                     for stream in value:
@@ -189,6 +191,12 @@ def parse_movies(request, list_type, full_liz, usecache, plot_enable, limit, dat
 
 def parse_tvshows_recommended(request, list_type, full_liz, usecache, plot_enable, limit, date_liz=None, date_type=None, favourites=False):
     prefix = "recommended-episodes" if not favourites else "favouriteepisodes"
+    if request == "recommendedchildren":
+        prefix = "recommended-children"
+    elif request == "recommendedcartoon":
+        prefix = "recommended-cartoon"
+    elif request == "recommendedmusicvideo":
+        prefix = "recommended-musicvideo"
     json_query = _get_data(request, usecache)
     while json_query == "LOADING":
         xbmc.sleep(100)
@@ -234,9 +242,11 @@ def parse_tvshows_recommended(request, list_type, full_liz, usecache, plot_enabl
                         liz.setProperty("type", ADDON_LANGUAGE(list_type))
                         liz.setProperty("fanart_image", episode['art'].get('tvshow.fanart', ''))
                         liz.setProperty("dbid", str(episode['episodeid']))
+                        liz.setProperty("cid", str(tvshow['tvshowid']))
                         liz.setArt(episode['art'])
                         liz.setThumbnailImage(episode['art'].get('thumb', ''))
                         liz.setIconImage('DefaultTVShows.png')
+                        liz.setPath(episode.get('path', ""))
                         hasVideo = False
                         for key, value in episode['streamdetails'].iteritems():
                             for stream in value:
@@ -610,3 +620,18 @@ def _get_data(request, usecache):
         return LIBRARY._fetch_random_musicvideos(usecache)
     elif request == "recentmusicvideos":
         return LIBRARY._fetch_recent_musicvideos(usecache)
+
+    elif request == "recommendedvarieties":
+        return LIBRARY._fetch_recommended_varieties(usecache)
+
+    elif request == "recommendedsvip":
+        return LIBRARY._fetch_recommended_svip(usecache)
+
+    elif request == "recommendedchildren":
+        return LIBRARY._fetch_recommended_children(usecache)
+
+    elif request == "recommendedcartoon":
+        return LIBRARY._fetch_recommended_cartoon(usecache)
+
+    elif request == "recommendedmusicvideo":
+        return LIBRARY._fetch_recommended_musicvideo(usecache)
