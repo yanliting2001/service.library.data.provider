@@ -3,6 +3,7 @@
 	<requires>
 		<import addon="xbmc.json" version="7.9.0"/>
 		<import addon="xbmc.python" version="2.25.0"/>
+		<import addon="script.plugin.cache2" />
 		<import addon="script.module.simplejson" version="3.3.0"/>
 		<import addon="script.module.routing" version="0.1.0"/>
 	</requires>
